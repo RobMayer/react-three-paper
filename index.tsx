@@ -2,33 +2,53 @@ import React, { useEffect, useRef, useCallback, useState } from "react";
 
 type tPaperRenderLoop = (time?: number) => void;
 type tPaperCleanup = () => void;
+type tPaperChangeHandler<T extends {[key: string]: any}> = (props: Partial<T>) => void;
 
-type tPaperScriptReturn = {
+type tPaperScriptReturn<T extends { [key: string]: any }> = {
   render: tPaperRenderLoop;
   cleanup?: tPaperCleanup;
+  onChange?: tPaperChangeHandler<T>
 };
 
-type tPaperScript = (canvas?: HTMLCanvasElement) => Promise<tPaperScriptReturn>;
+type tPaperScript<T extends { [key: string]: any }> = (canvas?: HTMLCanvasElement, initialProps?: T) => Promise<tPaperScriptReturn<T>>;
 type tPaperPositionEvent = (entry: IntersectionObserverEntry) => void;
 type tPaperErrorEvent = (error: Error) => void;
 
-interface iPaperPropTypes {
-  script: tPaperScript;
+type iPaperPropTypes<T extends { [key: string]: any }> = {
+  script: tPaperScript<T>;
   onExit?: tPaperPositionEvent;
   onEntry?: tPaperPositionEvent;
   onError?: tPaperErrorEvent;
   style?: React.CSSProperties;
-}
+  className?: string;
+} & T
 
 const IntersectionObserverOptions = {
   threshold: 0.01,
 };
 
-export function Paper({ script, style, onExit, onEntry, onError }: iPaperPropTypes) {
+export function Paper<T extends { [key: string]: any }>({ script, style, onExit, onEntry, onError, className, ...props }: iPaperPropTypes<T>) {
   const ref = useRef(null);
-  const [scriptReturn, setScriptReturn] = useState(null as tPaperScriptReturn);
+  const [scriptReturn, setScriptReturn] = useState(null as tPaperScriptReturn<T>);
 
-  const execScript = useCallback(async (promise: Promise<tPaperScriptReturn>, callback: tPaperErrorEvent) => {
+  const prevProps = useRef<any>(props);
+  useEffect(() => {
+    if (prevProps.current) {
+      const allKeys = Object.keys({ ...prevProps.current, ...props });
+      const changesObj: any = {};
+      allKeys.forEach((key) => {
+        if (prevProps.current[key] !== props[key]) {
+          changesObj[key] = props[key];
+        }
+        prevProps.current[key] = props[key];
+      });
+      if (Object.keys(changesObj).length) {
+        scriptReturn.onChange(changesObj as T);
+      }
+    }
+  }, [scriptReturn, props]);
+
+  const execScript = useCallback(async (promise: Promise<tPaperScriptReturn<T>>, callback: tPaperErrorEvent) => {
     try {
       const r = await promise;
       setScriptReturn(r);
@@ -41,7 +61,7 @@ export function Paper({ script, style, onExit, onEntry, onError }: iPaperPropTyp
     let ID: number = 0;
 
     if (scriptReturn === null) {
-      execScript(script(ref.current), (error: Error) => {
+      execScript(script(ref.current, prevProps.current), (error: Error) => {
         console.error(error);
         cancelAnimationFrame(ID);
         if (onError) onError(error);
@@ -78,6 +98,7 @@ export function Paper({ script, style, onExit, onEntry, onError }: iPaperPropTyp
   return (
     <canvas
       ref={ref}
+      className={className}
       style={{
         width: "100%",
         height: "100%",
