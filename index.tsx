@@ -43,7 +43,7 @@ export function Paper<T extends { [key: string]: any }>({ script, style, onExit,
         prevProps.current[key] = props[key];
       });
       if (Object.keys(changesObj).length) {
-        scriptReturn.onChange(changesObj as T);
+        scriptReturn.onChange?.(changesObj as T);
       }
     }
   }, [scriptReturn, props]);
